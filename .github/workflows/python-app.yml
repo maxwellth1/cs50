@@ -8,15 +8,41 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
   build:
-
+    name: '${{matrix.project.name}}'
     runs-on: ubuntu-latest
+  
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+
+        - project:
+            name: Minesweeper
+            path: minesweeper/runner.py
+            entry: "py minesweeper"
+            req: ""
+        - project:
+            name: Degrees
+            path: degrees/degrees.py
+            entry: "py degrees"
+            req: ""
+        - project:
+            name: Knights
+            path: knights/puzzle.py
+            entry: "py knights"
+            req: ""
+        - project:
+            name: Tic Tac Toe
+            path: tictactoe/runner.py
+            entry: "py tictactoe"
+            req: ""
 
     steps:
     - name: Check out code
@@ -26,13 +52,23 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: "3.10"
-        cache: 'pip'
-        
-    - name: Install dependencies
+        cache: pip
+        cache-dependency-path: ${{ matrix.project.path }}/${{ matrix.project.req }}
+
+    - name: Install dev tools
       run: |
         python -m pip install --upgrade pip
         pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        
+    - name: Install dependencies
+      run: |
+        REQ="${{ matrix.project.req }}"
+        if [ -n "$REQ" ] && [ -f "$REQ" ]; then
+          pip install -r "$REQ"
+        else
+          echo "No requirements file found, skipping."
+        fi
+      working-directory: ${{ matrix.project.path }}
         
     - name: Lint with flake8
       run: |
@@ -40,10 +76,17 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-        
-    - name: Test with pytest
-      run: pytest -q
-        pytest
+      working-directory: ${{ matrix.project.path }}
+      
+    - name: Run tests (if present)
+      run: |
+        if [ -d tests ] || compgen -G "*test*.py" > /dev/null; then
+          pytest -q
+        else
+          echo "No tests detected, skipping pytest."
+        fi
+      working-directory: ${{ matrix.project.path }}
 
-    - name: Run Minesweeper
-      run:  python minesweeper/runner.py
+    - name: Run project
+      run: ${{ matrix.project.entry }}
+      working-directory: ${{ matrix.project.path }}
